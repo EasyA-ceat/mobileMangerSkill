@@ -1,0 +1,41 @@
+{
+  "name": "phone-control",
+  "version": "1.0.0",
+  "description": "安卓手机远程控制技能，支持投屏、触控、自动化操作",
+  "category": "tool",
+  "author": "OpenClaw",
+  "license": "Apache-2.0",
+  "requirements": {
+    "system": ["adb", "scrcpy", "tesseract-ocr", "ffmpeg"],
+    "python": ["fastapi", "uvicorn", "pure-python-adb", "opencv-python", "pytesseract", "pillow", "numpy", "requests"]
+  },
+  "permissions": ["network", "local-storage", "system-exec"],
+  "entrypoints": {
+    "web": {
+      "command": "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}",
+      "port": 8080
+    }
+  },
+  "config": {
+    "adb_path": {
+      "type": "string",
+      "description": "ADB可执行文件路径",
+      "default": "adb"
+    },
+    "scrcpy_path": {
+      "type": "string",
+      "description": "Scrcpy可执行文件路径",
+      "default": "scrcpy"
+    },
+    "ocr_lang": {
+      "type": "string",
+      "description": "OCR识别语言",
+      "default": "chi_sim+eng"
+    },
+    "screenshot_quality": {
+      "type": "integer",
+      "description": "截图质量(1-100)",
+      "default": 80
+    }
+  }
+}

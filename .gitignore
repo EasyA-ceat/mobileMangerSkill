@@ -56,3 +56,26 @@ coverage.xml
 screenshots/
 temp/
 *.tmp
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Mobile MCP related
+*.png
+*.jpg
+*.jpeg
+
+# Security reports
+comprehensive_test_report.txt
+api_static_test_report.txt
+bandit_report.json
+
+# Test temporary files
+test_*.py
+!tests/test_*.py
+
+# OS files
+.DS_Store
+Thumbs.db

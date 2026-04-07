@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手机控制技能包 - Web管理面板</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <el-container class="app-container">
+            <el-header class="app-header">
+                <div class="header-left">
+                    <h1>📱 手机控制技能包</h1>
+                    <span class="version">v0.1.0</span>
+                </div>
+                <div class="header-right">
+                    <el-tag type="success" v-if="connected">已连接</el-tag>
+                    <el-tag type="info" v-else>未连接</el-tag>
+                </div>
+            </el-header>
+
+            <el-container class="main-container">
+                <el-aside width="300px" class="device-sidebar">
+                    <div class="sidebar-header">
+                        <h3>设备列表</h3>
+                        <el-button type="primary" size="small" @click="refreshDevices">
+                            <el-icon><Refresh /></el-icon> 刷新
+                        </el-button>
+                    </div>
+                    <el-scrollbar class="device-list">
+                        <el-card
+                            v-for="device in devices"
+                            :key="device.device_id"
+                            class="device-card"
+                            :class="{ active: currentDevice?.device_id === device.device_id }"
+                            shadow="hover"
+                            @click="selectDevice(device)"
+                        >
+                            <div class="device-info">
+                                <div class="device-name">
+                                    <el-icon v-if="device.status === 'connected'"><Connection /></el-icon>
+                                    <el-icon v-else><Close /></el-icon>
+                                    {{ device.name || device.device_id }}
+                                </div>
+                                <div class="device-details">
+                                    <el-tag :type="device.status === 'connected' ? 'success' : 'info'" size="small">
+                                        {{ device.status }}
+                                    </el-tag>
+                                    <span class="device-model" v-if="device.model">{{ device.model }}</span>
+                                </div>
+                            </div>
+                        </el-card>
+                    </el-scrollbar>
+                </el-aside>
+
+                <el-main class="control-panel">
+                    <div v-if="!currentDevice" class="no-device">
+                        <el-empty description="请先选择一个设备"></el-empty>
+                    </div>
+
+                    <div v-else class="device-control">
+                        <el-tabs v-model="activeTab">
+                            <el-tab-pane label="屏幕控制" name="screen">
+                                <div class="screen-container">
+                                    <div class="screen-toolbar">
+                                        <el-button-group>
+                                            <el-button @click="takeScreenshot">
+                                                <el-icon><Camera /></el-icon> 截屏
+                                            </el-button>
+                                            <el-button @click="refreshScreen">
+                                                <el-icon><Refresh /></el-icon> 刷新
+                                            </el-button>
+                                        </el-button-group>
+                                        <div class="screen-status">
+                                            <el-tag type="info" size="small">设备: {{ currentDevice.name }}</el-tag>
+                                        </div>
+                                    </div>
+                                    <div class="screen-display" @click="handleScreenClick">
+                                        <img v-if="currentScreenshot" :src="currentScreenshot" alt="设备屏幕">
+                                        <el-empty v-else description="点击刷新获取屏幕"></el-empty>
+                                    </div>
+                                </div>
+                            </el-tab-pane>
+
+                            <el-tab-pane label="快速操作" name="quick">
+                                <div class="quick-actions">
+                                    <el-card class="action-card">
+                                        <template #header>
+                                            <span>系统按键</span>
+                                        </template>
+                                        <el-button-group>
+                                            <el-button @click="pressKey('home')">🏠 主页</el-button>
+                                            <el-button @click="pressKey('back')">⬅️ 返回</el-button>
+                                            <el-button @click="pressKey('recent')">📱 最近任务</el-button>
+                                        </el-button-group>
+                                        <el-button-group style="margin-top: 10px;">
+                                            <el-button @click="pressKey('volume_up')">🔊 音量+</el-button>
+                                            <el-button @click="pressKey('volume_down')">🔉 音量-</el-button>
+                                            <el-button @click="pressKey('power')">🔋 电源</el-button>
+                                        </el-button-group>
+                                    </el-card>
+
+                                    <el-card class="action-card">
+                                        <template #header>
+                                            <span>文字输入</span>
+                                        </template>
+                                        <el-input v-model="inputText" placeholder="输入要发送的文字" clearable>
+                                            <template #append>
+                                                <el-button @click="sendInput">发送</el-button>
+                                            </template>
+                                        </el-input>
+                                    </el-card>
+
+                                    <el-card class="action-card">
+                                        <template #header>
+                                            <span>滑动操作</span>
+                                        </template>
+                                        <el-row :gutter="10">
+                                            <el-col :span="8">
+                                                <el-button style="width: 100%;" @click="swipe('up')">⬆️ 上滑</el-button>
+                                            </el-col>
+                                            <el-col :span="8">
+                                                <el-button style="width: 100%;" @click="swipe('down')">⬇️ 下滑</el-button>
+                                            </el-col>
+                                            <el-col :span="8">
+                                                <el-button style="width: 100%;" @click="swipe('left')">⬅️ 左滑</el-button>
+                                            </el-col>
+                                            <el-col :span="8" style="margin-top: 10px;">
+                                                <el-button style="width: 100%;" @click="swipe('right')">➡️ 右滑</el-button>
+                                            </el-col>
+                                        </el-row>
+                                    </el-card>
+                                </div>
+                            </el-tab-pane>
+
+                            <el-tab-pane label="脚本管理" name="script">
+                                <div class="script-panel">
+                                    <div class="script-toolbar">
+                                        <el-button type="primary" @click="showCreateScript = true">
+                                            <el-icon><Plus /></el-icon> 创建脚本
+                                        </el-button>
+                                        <el-button @click="refreshScripts">
+                                            <el-icon><Refresh /></el-icon> 刷新
+                                        </el-button>
+                                    </div>
+                                    <el-table :data="scripts" style="width: 100%">
+                                        <el-table-column prop="script_name" label="脚本名称"></el-table-column>
+                                        <el-table-column prop="description" label="描述"></el-table-column>
+                                        <el-table-column prop="status" label="状态">
+                                            <template #default="{ row }">
+                                                <el-tag :type="row.status === 'active' ? 'success' : 'info'">
+                                                    {{ row.status }}
+                                                </el-tag>
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="操作" width="200">
+                                            <template #default="{ row }">
+                                                <el-button size="small" @click="executeScript(row)">执行</el-button>
+                                                <el-button size="small" type="danger" @click="deleteScript(row)">删除</el-button>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </div>
+                            </el-tab-pane>
+
+                            <el-tab-pane label="脚本录制" name="record">
+                                <div class="record-panel">
+                                    <div class="record-status">
+                                        <el-alert
+                                            :title="recording ? '正在录制中...' : '准备就绪'"
+                                            :type="recording ? 'warning' : 'info'"
+                                            show-icon
+                                        >
+                                        </el-alert>
+                                    </div>
+                                    <div class="record-controls">
+                                        <el-button
+                                            v-if="!recording"
+                                            type="primary"
+                                            size="large"
+                                            @click="startRecording"
+                                        >
+                                            <el-icon><VideoPlay /></el-icon> 开始录制
+                                        </el-button>
+                                        <el-button
+                                            v-else
+                                            type="danger"
+                                            size="large"
+                                            @click="stopRecording"
+                                        >
+                                            <el-icon><VideoPause /></el-icon> 停止录制
+                                        </el-button>
+                                    </div>
+                                    <div v-if="recordingStatus" class="record-info">
+                                        <el-descriptions :column="2" border>
+                                            <el-descriptions-item label="录制状态">
+                                                <el-tag :type="recordingStatus.is_recording ? 'success' : 'info'">
+                                                    {{ recordingStatus.is_recording ? '录制中' : '已停止' }}
+                                                </el-tag>
+                                            </el-descriptions-item>
+                                            <el-descriptions-item label="动作数量">
+                                                {{ recordingStatus.action_count }}
+                                            </el-descriptions-item>
+                                            <el-descriptions-item label="录制时长" :span="2">
+                                                {{ recordingStatus.duration }}秒
+                                            </el-descriptions-item>
+                                        </el-descriptions>
+                                    </div>
+                                    <div v-if="recordedScript" class="recorded-script">
+                                        <h4>录制的脚本:</h4>
+                                        <el-input
+                                            v-model="recordedScript"
+                                            type="textarea"
+                                            :rows="10"
+                                            readonly
+                                        ></el-input>
+                                        <div class="script-actions">
+                                            <el-button type="primary" @click="saveRecordedScript">
+                                                保存脚本
+                                            </el-button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </el-tab-pane>
+
+                            <el-tab-pane label="操作日志" name="logs">
+                                <div class="logs-panel">
+                                    <div class="logs-toolbar">
+                                        <el-select v-model="logFilter.device_id" placeholder="选择设备" clearable style="width: 200px; margin-right: 10px;">
+                                            <el-option
+                                                v-for="device in devices"
+                                                :key="device.device_id"
+                                                :label="device.name || device.device_id"
+                                                :value="device.device_id"
+                                            ></el-option>
+                                        </el-select>
+                                        <el-button @click="refreshLogs">
+                                            <el-icon><Refresh /></el-icon> 刷新
+                                        </el-button>
+                                    </div>
+                                    <el-table :data="logs" style="width: 100%">
+                                        <el-table-column prop="created_at" label="时间" width="180"></el-table-column>
+                                        <el-table-column prop="device_id" label="设备" width="150"></el-table-column>
+                                        <el-table-column prop="operation_type" label="操作类型" width="120"></el-table-column>
+                                        <el-table-column prop="operation_detail" label="详情"></el-table-column>
+                                        <el-table-column prop="status" label="状态" width="100">
+                                            <template #default="{ row }">
+                                                <el-tag :type="row.status === 'success' ? 'success' : 'danger'">
+                                                    {{ row.status }}
+                                                </el-tag>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </div>
+                            </el-tab-pane>
+                        </el-tabs>
+                    </div>
+                </el-main>
+            </el-container>
+        </el-container>
+
+        <el-dialog v-model="showCreateScript" title="创建脚本" width="500px">
+            <el-form :model="newScript" label-width="80px">
+                <el-form-item label="脚本名称">
+                    <el-input v-model="newScript.script_name"></el-input>
+                </el-form-item>
+                <el-form-item label="描述">
+                    <el-input v-model="newScript.description" type="textarea"></el-input>
+                </el-form-item>
+                <el-form-item label="脚本内容">
+                    <el-input v-model="newScript.script_content" type="textarea" :rows="10"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showCreateScript = false">取消</el-button>
+                <el-button type="primary" @click="createScript">创建</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="showSaveScript" title="保存录制的脚本" width="500px">
+            <el-form :model="saveScriptForm" label-width="80px">
+                <el-form-item label="脚本名称">
+                    <el-input v-model="saveScriptForm.script_name"></el-input>
+                </el-form-item>
+                <el-form-item label="描述">
+                    <el-input v-model="saveScriptForm.description" type="textarea"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showSaveScript = false">取消</el-button>
+                <el-button type="primary" @click="confirmSaveScript">保存</el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

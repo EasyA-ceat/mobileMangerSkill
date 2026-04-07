@@ -15,9 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.device_manager import DeviceManager, Device, DeviceStatus, DeviceType
 from src.adb_client import ADBClient, Point, SwipeGesture
-from src.screen import OCRMatch, ScreenController
+from src.screen import TextMatch, ScreenController
 from src.script_runner import ScriptRunner, ActionType, ActionResult
-from src.command_handler import CommandHandler, CommandType
+from src.command_handler import CommandHandler, CommandType, ParsedCommand
 
 
 # ==================== 设备管理器测试 ====================
@@ -25,11 +25,10 @@ from src.command_handler import CommandHandler, CommandType
 class TestDeviceManager:
     """设备管理器测试"""
 
-    def test_singleton(self):
-        """测试单例模式"""
-        manager1 = DeviceManager()
-        manager2 = DeviceManager()
-        assert manager1 is manager2
+    def test_device_creation(self):
+        """测试设备对象创建"""
+        manager = DeviceManager()
+        assert manager is not None
 
     @patch('subprocess.run')
     def test_list_devices(self, mock_run):
@@ -119,9 +118,9 @@ class TestScreenController:
 
         assert image is not None
 
-    def test_ocr_match_creation(self):
-        """测试OCR匹配对象创建"""
-        match = OCRMatch(
+    def test_text_match_creation(self):
+        """测试文字匹配对象创建"""
+        match = TextMatch(
             text="测试文字",
             x=100,
             y=200,

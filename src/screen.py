@@ -26,6 +26,7 @@ except ImportError:
     print("警告: pytesseract未安装，OCR功能将不可用")
 
 from .device_manager import DeviceManager, Device
+from .adb_client import get_adb_client
 
 
 @dataclass
@@ -266,6 +267,26 @@ class ScreenController:
                     return match
 
         return None
+
+    def click(
+        self,
+        x: int,
+        y: int,
+        device_id: Optional[str] = None
+    ) -> bool:
+        """
+        点击指定坐标
+
+        Args:
+            x: X坐标
+            y: Y坐标
+            device_id: 设备ID
+
+        Returns:
+            是否成功
+        """
+        adb_client = get_adb_client(self.device_manager, device_id)
+        return adb_client.click(x, y, device_id)
 
     def click_by_text(
         self,

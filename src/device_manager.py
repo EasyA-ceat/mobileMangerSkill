@@ -23,13 +23,22 @@ class DeviceStatus(Enum):
     BOOTLOADER = "bootloader"
 
 
+class DeviceType(Enum):
+    """设备类型枚举"""
+    USB = "usb"
+    NETWORK = "network"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class Device:
     """设备数据类"""
     device_id: str
-    name: str = ""
     status: DeviceStatus = DeviceStatus.UNKNOWN
-    device_type: str = "unknown"  # usb, network
+    type: DeviceType = DeviceType.UNKNOWN
+    model: Optional[str] = None
+    android_version: Optional[str] = None
+    name: str = ""
     properties: Dict = field(default_factory=dict)
     last_seen: float = field(default_factory=time.time)
 
@@ -39,7 +48,9 @@ class Device:
             "device_id": self.device_id,
             "name": self.name or self.device_id,
             "status": self.status.value,
-            "type": self.device_type,
+            "type": self.type.value,
+            "model": self.model,
+            "android_version": self.android_version,
             "properties": self.properties,
             "last_seen": self.last_seen
         }
@@ -108,9 +119,9 @@ class DeviceManager:
 
         # 确定设备类型
         if ":" in device_id:
-            device_type = "network"
+            device_type = DeviceType.NETWORK
         else:
-            device_type = "usb"
+            device_type = DeviceType.USB
 
         # 解析状态
         status_map = {
@@ -123,19 +134,31 @@ class DeviceManager:
         status = status_map.get(status_str, DeviceStatus.UNKNOWN)
 
         # 尝试获取更多设备信息
+        model = None
+        android_version = None
         properties = {}
         if status == DeviceStatus.CONNECTED:
             success, stdout, _ = self._run_adb_command(
                 ["-s", device_id, "shell", "getprop", "ro.product.model"]
             )
             if success:
-                properties["model"] = stdout.strip()
+                model = stdout.strip()
+                properties["model"] = model
+
+            success, stdout, _ = self._run_adb_command(
+                ["-s", device_id, "shell", "getprop", "ro.build.version.release"]
+            )
+            if success:
+                android_version = stdout.strip()
+                properties["android_version"] = android_version
 
         device = Device(
             device_id=device_id,
-            name=properties.get("model", device_id),
+            name=model or device_id,
             status=status,
-            device_type=device_type,
+            type=device_type,
+            model=model,
+            android_version=android_version,
             properties=properties
         )
 

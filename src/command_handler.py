@@ -280,7 +280,7 @@ if __name__ == "__main__":
         "按键 back",
         "打开App com.example.app",
         "截屏",
-        "执行脚本 [{"action": "click", "params": {"target": "500,1000"}}]"
+        '执行脚本 [{"action": "click", "params": {"target": "500,1000"}}]'
     ]
 
     print("=== 指令解析测试 ===\n")

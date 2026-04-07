@@ -6,6 +6,7 @@ ADB控制客户端
 import re
 import time
 import subprocess
+import shlex
 from typing import List, Dict, Tuple, Optional, Union
 from dataclasses import dataclass
 from .device_manager import DeviceManager, Device, DeviceStatus
@@ -123,12 +124,12 @@ class ADBClient:
 
         raise ValueError("没有可用的设备，请先连接设备")
 
-    def _run_shell(self, command: str, device_id: Optional[str] = None) -> Tuple[bool, str, str]:
+    def _run_shell(self, command_args: List[str], device_id: Optional[str] = None) -> Tuple[bool, str, str]:
         """
-        在设备上执行shell命令
+        在设备上执行shell命令（安全版本，使用列表参数避免注入）
 
         Args:
-            command: shell命令
+            command_args: shell命令参数列表
             device_id: 设备ID
 
         Returns:
@@ -136,16 +137,25 @@ class ADBClient:
         """
         try:
             device_id = self._get_device_id(device_id)
-            cmd = ["adb", "-s", device_id, "shell", command]
+            cmd = ["adb", "-s", device_id, "shell"] + command_args
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                shell=False
             )
             return result.returncode == 0, result.stdout, result.stderr
         except Exception as e:
             return False, "", str(e)
+
+    def _validate_coordinate(self, value: int) -> int:
+        """验证坐标值"""
+        if not isinstance(value, int):
+            raise ValueError("坐标必须是整数")
+        if value < 0 or value > 10000:
+            raise ValueError("坐标值超出合理范围")
+        return value
 
     def click(self, x: int, y: int, device_id: Optional[str] = None) -> bool:
         """
@@ -159,10 +169,16 @@ class ADBClient:
         Returns:
             是否成功
         """
-        success, _, stderr = self._run_shell(f"input tap {x} {y}", device_id)
-        if not success:
-            print(f"点击失败: {stderr}")
-        return success
+        try:
+            x = self._validate_coordinate(x)
+            y = self._validate_coordinate(y)
+            success, _, stderr = self._run_shell(["input", "tap", str(x), str(y)], device_id)
+            if not success:
+                print(f"点击失败: {stderr}")
+            return success
+        except ValueError as e:
+            print(f"参数验证失败: {e}")
+            return False
 
     def click_point(self, point: Union[Point, str], device_id: Optional[str] = None) -> bool:
         """
@@ -202,13 +218,23 @@ class ADBClient:
         Returns:
             是否成功
         """
-        success, _, stderr = self._run_shell(
-            f"input swipe {start_x} {start_y} {end_x} {end_y} {duration}",
-            device_id
-        )
-        if not success:
-            print(f"滑动失败: {stderr}")
-        return success
+        try:
+            start_x = self._validate_coordinate(start_x)
+            start_y = self._validate_coordinate(start_y)
+            end_x = self._validate_coordinate(end_x)
+            end_y = self._validate_coordinate(end_y)
+            duration = max(100, min(5000, duration))
+            
+            success, _, stderr = self._run_shell(
+                ["input", "swipe", str(start_x), str(start_y), str(end_x), str(end_y), str(duration)],
+                device_id
+            )
+            if not success:
+                print(f"滑动失败: {stderr}")
+            return success
+        except ValueError as e:
+            print(f"参数验证失败: {e}")
+            return False
 
     def swipe_gesture(self, gesture: SwipeGesture, device_id: Optional[str] = None) -> bool:
         """
@@ -239,23 +265,27 @@ class ADBClient:
         Returns:
             是否成功
         """
-        # 转义特殊字符
-        escaped_text = text.replace("'", "'\"'\"'").replace(" ", "%s")
-
-        if "%s" in escaped_text:
+        try:
+            # 限制输入长度
+            if len(text) > 1000:
+                print("输入文字过长")
+                return False
+                
+            # 使用ADB的input text命令，注意文字中的空格需要特殊处理
+            # ADB input text对空格处理特殊，我们可以通过多次调用或使用其他方法
+            # 这里使用简单的空格替换为%s（ADB的方式）
+            safe_text = text.replace(" ", "%s")
+            
             success, _, stderr = self._run_shell(
-                f"input text '{escaped_text}'",
+                ["input", "text", safe_text],
                 device_id
             )
-        else:
-            success, _, stderr = self._run_shell(
-                f"input text '{escaped_text}'",
-                device_id
-            )
-
-        if not success:
-            print(f"输入文字失败: {stderr}")
-        return success
+            if not success:
+                print(f"输入文字失败: {stderr}")
+            return success
+        except Exception as e:
+            print(f"输入文字异常: {e}")
+            return False
 
     def press_key(self, key: str, device_id: Optional[str] = None) -> bool:
         """
@@ -268,16 +298,30 @@ class ADBClient:
         Returns:
             是否成功
         """
-        # 检查是否是预定义的按键名称
-        key_code = self.KEY_CODES.get(key.lower(), key)
+        try:
+            # 验证key参数
+            if not key or len(key) > 100:
+                print("无效的按键参数")
+                return False
+                
+            # 检查是否是预定义的按键名称
+            key_code = self.KEY_CODES.get(key.lower(), key)
+            
+            # 确保key_code只包含字母、数字和下划线
+            if not re.match(r'^[A-Za-z0-9_]+$', key_code):
+                print("按键代码格式无效")
+                return False
 
-        success, _, stderr = self._run_shell(
-            f"input keyevent {key_code}",
-            device_id
-        )
-        if not success:
-            print(f"按键失败: {stderr}")
-        return success
+            success, _, stderr = self._run_shell(
+                ["input", "keyevent", key_code],
+                device_id
+            )
+            if not success:
+                print(f"按键失败: {stderr}")
+            return success
+        except Exception as e:
+            print(f"按键操作异常: {e}")
+            return False
 
     def start_app(self, package_name: str, activity: Optional[str] = None, device_id: Optional[str] = None) -> bool:
         """
@@ -291,22 +335,34 @@ class ADBClient:
         Returns:
             是否成功
         """
-        if activity:
-            cmd = f"am start -n {package_name}/{activity}"
-        else:
-            cmd = f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
+        try:
+            # 验证包名格式
+            if not re.match(r'^[a-zA-Z0-9_.]+$', package_name):
+                print("无效的包名格式")
+                return False
+                
+            if activity:
+                if not re.match(r'^[a-zA-Z0-9_.]+$', activity):
+                    print("无效的Activity格式")
+                    return False
+                cmd_args = ["am", "start", "-n", f"{package_name}/{activity}"]
+            else:
+                cmd_args = ["monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"]
 
-        success, stdout, stderr = self._run_shell(cmd, device_id)
-        if not success:
-            print(f"启动应用失败: {stderr}")
+            success, stdout, stderr = self._run_shell(cmd_args, device_id)
+            if not success:
+                print(f"启动应用失败: {stderr}")
+                return False
+
+            # 检查是否有错误信息
+            if "Error" in stdout or "Exception" in stdout:
+                print(f"启动应用出错: {stdout}")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"启动应用异常: {e}")
             return False
-
-        # 检查是否有错误信息
-        if "Error" in stdout or "Exception" in stdout:
-            print(f"启动应用出错: {stdout}")
-            return False
-
-        return True
 
     def stop_app(self, package_name: str, device_id: Optional[str] = None) -> bool:
         """
@@ -319,13 +375,22 @@ class ADBClient:
         Returns:
             是否成功
         """
-        success, _, stderr = self._run_shell(
-            f"am force-stop {package_name}",
-            device_id
-        )
-        if not success:
-            print(f"停止应用失败: {stderr}")
-        return success
+        try:
+            # 验证包名格式
+            if not re.match(r'^[a-zA-Z0-9_.]+$', package_name):
+                print("无效的包名格式")
+                return False
+                
+            success, _, stderr = self._run_shell(
+                ["am", "force-stop", package_name],
+                device_id
+            )
+            if not success:
+                print(f"停止应用失败: {stderr}")
+            return success
+        except Exception as e:
+            print(f"停止应用异常: {e}")
+            return False
 
     def list_apps(self, system_apps: bool = False, device_id: Optional[str] = None) -> List[Dict]:
         """
@@ -340,7 +405,7 @@ class ADBClient:
         """
         # 获取第三方应用
         success, stdout, stderr = self._run_shell(
-            "pm list packages -3",
+            ["pm", "list", "packages", "-3"],
             device_id
         )
 
@@ -359,7 +424,7 @@ class ADBClient:
         # 如果需要系统应用
         if system_apps:
             success, stdout, stderr = self._run_shell(
-                "pm list packages -s",
+                ["pm", "list", "packages", "-s"],
                 device_id
             )
             if success:
@@ -388,7 +453,7 @@ class ADBClient:
             (宽度, 高度) 或 None
         """
         success, stdout, stderr = self._run_shell(
-            "wm size",
+            ["wm", "size"],
             device_id
         )
         if not success:
@@ -411,7 +476,7 @@ class ADBClient:
             Android版本号或None
         """
         success, stdout, stderr = self._run_shell(
-            "getprop ro.build.version.release",
+            ["getprop", "ro.build.version.release"],
             device_id
         )
         if success:
